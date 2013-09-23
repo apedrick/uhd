@@ -1,5 +1,5 @@
 //
-// Copyright 2010-2012 Ettus Research LLC
+// Copyright 2010-2013 Ettus Research LLC
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -15,6 +15,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+#include <uhd/types/tune_request.hpp>
 #include <uhd/utils/thread_priority.hpp>
 #include <uhd/utils/safe_main.hpp>
 #include <uhd/utils/static.hpp>
@@ -200,12 +201,12 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
     uhd::set_thread_priority_safe();
 
     //transmit variables to be set by po
-    std::string tx_args, wave_type, tx_ant, tx_subdev, ref, otw, tx_channels;
+    std::string tx_args, tx_tune_args, wave_type, tx_ant, tx_subdev, ref, otw, tx_channels;
     double tx_rate, tx_freq, tx_gain, wave_freq, tx_bw;
     float ampl;
 
     //receive variables to be set by po
-    std::string rx_args, file, type, rx_ant, rx_subdev, rx_channels;
+    std::string rx_args, rx_tune_args, file, type, rx_ant, rx_subdev, rx_channels;
     size_t total_num_samps, spb;
     double rx_rate, rx_freq, rx_gain, rx_bw;
     float settling;
@@ -215,7 +216,9 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
     desc.add_options()
         ("help", "help message")
         ("tx-args", po::value<std::string>(&tx_args)->default_value(""), "uhd transmit device address args")
+        ("tx-tune-args", po::value<std::string>(&tx_tune_args)->default_value("mode_n=fractional"), "for SBX boards, mode_n=fractional or mode_n=integer")
         ("rx-args", po::value<std::string>(&rx_args)->default_value(""), "uhd receive device address args")
+        ("rx-tune-args", po::value<std::string>(&tx_tune_args)->default_value("mode_n=fractional"), "for SBX boards, mode_n=fractional or mode_n=integer")
         ("file", po::value<std::string>(&file)->default_value("usrp_samples.dat"), "name of the file to write binary samples to")
         ("type", po::value<std::string>(&type)->default_value("short"), "sample type in file: double, float, or short")
         ("nsamps", po::value<size_t>(&total_num_samps)->default_value(0), "total number of samples to receive")
@@ -318,7 +321,9 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 
     for(size_t ch = 0; ch < tx_channel_nums.size(); ch++) {
         std::cout << boost::format("Setting TX Freq: %f MHz...") % (tx_freq/1e6) << std::endl;
-        tx_usrp->set_tx_freq(tx_freq, tx_channel_nums[ch]);
+        uhd::tune_request_t tx_tune_request = uhd::tune_request_t(tx_freq);
+        tx_tune_request.args = tx_tune_args;
+        tx_usrp->set_tx_freq(tx_tune_request, tx_channel_nums[ch]);
         std::cout << boost::format("Actual TX Freq: %f MHz...") % (tx_usrp->get_tx_freq(tx_channel_nums[ch])/1e6) << std::endl << std::endl;
 
         //set the rf gain
@@ -345,7 +350,9 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
         return ~0;
     }
     std::cout << boost::format("Setting RX Freq: %f MHz...") % (rx_freq/1e6) << std::endl;
-    rx_usrp->set_rx_freq(rx_freq);
+    uhd::tune_request_t rx_tune_request = uhd::tune_request_t(rx_freq);
+    rx_tune_request.args = rx_tune_args;
+    rx_usrp->set_rx_freq(rx_tune_request);
     std::cout << boost::format("Actual RX Freq: %f MHz...") % (rx_usrp->get_rx_freq()/1e6) << std::endl << std::endl;
 
     //set the receive rf gain

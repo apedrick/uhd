@@ -148,6 +148,11 @@ static tune_result_t tune_xx_subdev_and_dsp(
     }
 
     //------------------------------------------------------------------
+    //-- poke the sample rate into the dboard
+    //------------------------------------------------------------------
+    rf_fe_subtree->access<double>("sample_rate").set(dsp_subtree->access<double>("rate/value").get());
+
+    //------------------------------------------------------------------
     //-- set the RF frequency depending upon the policy
     //------------------------------------------------------------------
     double target_rf_freq = 0.0;

@@ -1,5 +1,5 @@
 //
-// Copyright 2010-2011 Ettus Research LLC
+// Copyright 2010-2011,2013 Ettus Research LLC
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -15,6 +15,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+#include <uhd/types/tune_request.hpp>
 #include <uhd/utils/thread_priority.hpp>
 #include <uhd/utils/safe_main.hpp>
 #include <uhd/usrp/multi_usrp.hpp>
@@ -36,7 +37,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
     uhd::set_thread_priority_safe();
 
     //variables to be set by po
-    std::string args, channel_list;
+    std::string args, tune_args, channel_list;
     double seconds_in_future;
     size_t total_num_samps;
     double rate;
@@ -50,6 +51,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
     desc.add_options()
         ("help", "help message")
         ("args", po::value<std::string>(&args)->default_value(""), "multi uhd device address args")
+        ("tune-args", po::value<std::string>(&tune_args)->default_value("mode_n=fractional"), "for SBX boards, mode_n=fractional or mode_n=integer")
         ("secs", po::value<double>(&seconds_in_future)->default_value(1.5), "delay before first burst")
         ("repeat", "repeat burst")
         ("rep-delay", po::value<double>(&rep_rate)->default_value(0.5), "delay between bursts")
@@ -98,7 +100,11 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
     std::cout << boost::format("Actual TX Rate: %f Msps...") % (usrp->get_tx_rate()/1e6) << std::endl << std::endl;
 
     std::cout << boost::format("Setting TX Freq: %f MHz...") % (freq/1e6) << std::endl;
-    for(size_t i=0; i < channel_nums.size(); i++) usrp->set_tx_freq(freq, channel_nums[i]);
+    for(size_t i=0; i < channel_nums.size(); i++){
+        uhd::tune_request_t tune_request = uhd::tune_request_t(freq);
+        tune_request.args = tune_args;
+        usrp->set_tx_freq(tune_request, channel_nums[i]);
+    }
     std::cout << boost::format("Actual TX Freq: %f MHz...") % (usrp->get_tx_freq()/1e6) << std::endl << std::endl;
 
     std::cout << boost::format("Setting TX Gain: %f...") % (gain) << std::endl;

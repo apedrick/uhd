@@ -1,5 +1,5 @@
 //
-// Copyright 2010-2012 Ettus Research LLC
+// Copyright 2010-2013 Ettus Research LLC
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -15,6 +15,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+#include <uhd/types/tune_request.hpp>
 #include <uhd/utils/thread_priority.hpp>
 #include <uhd/utils/safe_main.hpp>
 #include <uhd/usrp/multi_usrp.hpp>
@@ -32,7 +33,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
     uhd::set_thread_priority_safe();
 
     //variables to be set by po
-    std::string args, file, ant, subdev, ref;
+    std::string args, tune_args, file, ant, subdev, ref;
     size_t total_num_samps;
     double rate, freq, gain, bw;
     std::string addr, port;
@@ -42,6 +43,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
     desc.add_options()
         ("help", "help message")
         ("args", po::value<std::string>(&args)->default_value(""), "multi uhd device address args")
+        ("tune-args", po::value<std::string>(&tune_args)->default_value("mode_n=fractional"), "for SBX boards, mode_n=fractional or mode_n=integer")
         ("nsamps", po::value<size_t>(&total_num_samps)->default_value(1000), "total number of samples to receive")
         ("rate", po::value<double>(&rate)->default_value(100e6/16), "rate of incoming samples")
         ("freq", po::value<double>(&freq)->default_value(0), "rf center frequency in Hz")
@@ -79,7 +81,9 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 
     //set the rx center frequency
     std::cout << boost::format("Setting RX Freq: %f Mhz...") % (freq/1e6) << std::endl;
-    usrp->set_rx_freq(freq);
+    uhd::tune_request_t tune_request = uhd::tune_request_t(freq);
+    tune_request.args = tune_args;
+    usrp->set_rx_freq(tune_request);
     std::cout << boost::format("Actual RX Freq: %f Mhz...") % (usrp->get_rx_freq()/1e6) << std::endl << std::endl;
 
     //set the rx rf gain

@@ -1,5 +1,5 @@
 //
-// Copyright 2010-2012 Ettus Research LLC
+// Copyright 2010-2013 Ettus Research LLC
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -15,6 +15,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+#include <uhd/types/tune_request.hpp>
 #include <uhd/utils/thread_priority.hpp>
 #include <uhd/utils/safe_main.hpp>
 #include <uhd/utils/static.hpp>
@@ -93,7 +94,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
     uhd::set_thread_priority_safe();
 
     //variables to be set by po
-    std::string args, wave_type, ant, subdev, ref, otw, channel_list;
+    std::string args, tune_args, wave_type, ant, subdev, ref, otw, channel_list;
     size_t spb;
     double rate, freq, gain, wave_freq, bw;
     float ampl;
@@ -103,6 +104,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
     desc.add_options()
         ("help", "help message")
         ("args", po::value<std::string>(&args)->default_value(""), "single uhd device address args")
+        ("tune-args", po::value<std::string>(&tune_args)->default_value("mode_n=fractional"), "for SBX boards, mode_n=fractional or mode_n=integer")
         ("spb", po::value<size_t>(&spb)->default_value(0), "samples per buffer, 0 for default")
         ("rate", po::value<double>(&rate), "rate of outgoing samples")
         ("freq", po::value<double>(&freq), "RF center frequency in Hz")
@@ -144,7 +146,6 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
         else channel_nums.push_back(boost::lexical_cast<int>(channel_strings[ch]));
     }
 
-
     //Lock mboard clocks
     usrp->set_clock_source(ref);
 
@@ -170,7 +171,9 @@ int UHD_SAFE_MAIN(int argc, char *argv[]){
 
     for(size_t ch = 0; ch < channel_nums.size(); ch++) {
         std::cout << boost::format("Setting TX Freq: %f MHz...") % (freq/1e6) << std::endl;
-        usrp->set_tx_freq(freq, channel_nums[ch]);
+        uhd::tune_request_t tune_request(freq);
+        tune_request.args = tune_args;
+        usrp->set_tx_freq(tune_request, channel_nums[ch]);
         std::cout << boost::format("Actual TX Freq: %f MHz...") % (usrp->get_tx_freq(channel_nums[ch])/1e6) << std::endl << std::endl;
 
         //set the rf gain
