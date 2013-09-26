@@ -1,5 +1,5 @@
 //
-// Copyright 2011-2012 Ettus Research LLC
+// Copyright 2011-2013 Ettus Research LLC
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 #include "max2870_regs.hpp"
 #include "db_sbx_common.hpp"
-
+#include <uhd/types/tune_request.hpp>
 
 using namespace uhd;
 using namespace uhd::usrp;
@@ -45,6 +45,61 @@ double sbx_xcvr::cbx::set_lo_freq(dboard_iface::unit_t unit, double target_freq)
     UHD_LOGV(often) << boost::format(
         "CBX tune: target frequency %f Mhz"
     ) % (target_freq/1e6) << std::endl;
+
+    /* The below chunk of code parses two arguments out of the tune_args block:
+     *      lo_mode:
+     *          If lo_mode is set to 'on_demand', the user wants to turn off the
+     *          opposite mixer. If 'on_demand' isn't set, the user wants the
+     *          other mixer to remain on, which is the default functionality.
+     *      integer_n:
+     *          If the user set 'mode_n' in the tuning args, the user wishes to
+     *          tune in Integer-N mode, which can result in better spur
+     *          performance on some mixers. The default is fractional tuning. */
+    bool integer_n = false;
+    double sample_rate = 0.0;
+    double baseband_bw = 0.0;
+
+    /* There are some settings that we can only use if both sides (TX, RX) of
+     * the daughterboard have been init'd. This bool gates that decision.*/
+    bool inited = (self_base->get_rx_subtree()->exists("tune_args")) \
+                  && (self_base->get_tx_subtree()->exists("tune_args"));
+
+    if(unit == dboard_iface::UNIT_RX) {
+        if (inited) {
+
+            device_addr_t args = self_base->get_rx_subtree()->access<device_addr_t>("tune_args").get();
+
+            bool on_demand = args.get("lo_mode", "auto") == "on_demand";
+            if(self_base->get_tx_subtree()->access<bool>("mixer_state").get() == on_demand) {
+                UHD_LOGV(often) << boost::format("set_lo_freq: rx_unit with mode %u") % on_demand << std::endl;
+                self_base->get_tx_subtree()->access<bool>("mixer_state").set(!on_demand);
+            }
+
+            integer_n = args.get("mode_n", "fractional") != "fractional";
+            UHD_LOGV(often) << boost::format("set_lo_freq: integer_n with mode %s") % args.get("mode_n", "fractional") << std::endl;
+        }
+
+        sample_rate = self_base->get_rx_subtree()->access<double>("sample_rate").get();
+        baseband_bw = self_base->get_rx_subtree()->access<double>("bandwidth/value").get();
+
+    } else if(unit == dboard_iface::UNIT_TX) {
+        if (inited) {
+
+            device_addr_t args = self_base->get_tx_subtree()->access<device_addr_t>("tune_args").get();
+
+            bool on_demand = args.get("lo_mode", "auto") == "on_demand";
+            if(self_base->get_rx_subtree()->access<bool>("mixer_state").get() == on_demand) {
+                UHD_LOGV(often) << boost::format("set_lo_freq: tx_unit with mode %u") % on_demand << std::endl;
+                self_base->get_rx_subtree()->access<bool>("mixer_state").set(!on_demand);
+            }
+
+            integer_n = args.get("mode_n", "fractional") != "fractional";
+            UHD_LOGV(often) << boost::format("set_lo_freq: integer_n with mode %s") % args.get("mode_n", "fractional") << std::endl;
+        }
+
+        sample_rate = self_base->get_tx_subtree()->access<double>("sample_rate").get();
+        baseband_bw = self_base->get_tx_subtree()->access<double>("bandwidth/value").get();
+    }
 
     //clip the input
     target_freq = cbx_freq_range.clip(target_freq);
@@ -112,11 +167,13 @@ double sbx_xcvr::cbx::set_lo_freq(dboard_iface::unit_t unit, double target_freq)
         //ignore fractional part of tuning
         N = int(vco_freq/pfd_freq);
 
-        //Fractional-N calculation
-        FRAC = int((vco_freq/pfd_freq - N)*MOD);
-
-        //are we in int-N or frac-N mode?
-        int_n_mode = (FRAC == 0) ? max2870_regs_t::INT_N_MODE_INT_N : max2870_regs_t::INT_N_MODE_FRAC_N;
+        /* If we are operating in integer_n mode, then there is a possiblity
+         * that the user could request a frequency which results in a DSP rate
+         * and frequency step size that make spectrum outside of the baseband
+         * filter accessible. The below conditional prevents this. */
+        if (integer_n) {
+            if (((sample_rate / 2) + (ref_freq / R)) >= (baseband_bw / 2)) continue;
+        }
 
         //keep N within int divider requirements
         if(int_n_mode == max2870_regs_t::INT_N_MODE_INT_N) {
@@ -130,6 +187,15 @@ double sbx_xcvr::cbx::set_lo_freq(dboard_iface::unit_t unit, double target_freq)
         //keep pfd freq low enough to achieve 50kHz BS clock
         BS = std::ceil(pfd_freq / 50e3);
         if(BS <= 1023) break;
+    }
+
+    //Fractional-N calculation
+    if(integer_n) {
+        MOD = 1;
+        FRAC = 0;
+    } else {
+        MOD = 4095; //max fractional accuracy
+        FRAC = int((vco_freq/pfd_freq - N)*MOD);
     }
 
     UHD_ASSERT_THROW(R <= 1023);
