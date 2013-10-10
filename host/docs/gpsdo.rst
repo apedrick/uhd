@@ -1,5 +1,5 @@
 ========================================================================
-UHD - Internal GPSDO Application Notes
+UHD - Internal GPSDO Application Notes (USRP-N2x0/E1X0 Models)
 ========================================================================
 
 .. contents:: Table of Contents
